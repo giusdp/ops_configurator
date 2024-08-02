@@ -3,15 +3,77 @@ import {
   readPositionalFile,
   parsePositionalFile,
   NotValidJsonMsg,
-  NoConfigFileProvidedMsg,
+  HelpMsg,
   AdditionalArgsMsg,
+  validateConfigJson,
+  BadConfigMsg,
+  findMissingConfig,
 } from "../index.ts";
+
+describe("cleanUpConfig", () => {
+  test("config has some opsConfig key", async () => {
+    const config: any = { hello: "world", world: "hello" };
+    const opsConfig = { hello: "world" };
+    const newC = findMissingConfig(config, opsConfig);
+    expect(newC).toEqual({ world: "hello" });
+  });
+
+  test("config has no opsConfig key", async () => {
+    const config: any = { hello: "world", world: "hello" };
+    const opsConfig = { not: "existing" };
+    const newC = findMissingConfig(config, opsConfig);
+    expect(newC).toEqual({ hello: "world", world: "hello" });
+  });
+
+  test("opsConfig has no key", async () => {
+    const config: any = { hello: "world", world: "hello" };
+    const opsConfig = {};
+    const newC = findMissingConfig(config, opsConfig);
+    expect(newC).toEqual({ hello: "world", world: "hello" });
+  });
+
+  test("config and opsConfig are the same", async () => {
+    const config: any = { hello: "world", world: "hello" };
+    const opsConfig = { hello: "world", world: "hello" };
+    const newC = findMissingConfig(config, opsConfig);
+    expect(newC).toEqual({});
+  });
+});
+
+describe("validateConfigJson", () => {
+  test("empty config", async () => {
+    const res = validateConfigJson({});
+    expect(res.success).toBe(false);
+    expect(res.message).toBe(BadConfigMsg);
+  });
+
+  test("wrong json", async () => {
+    const res = validateConfigJson({
+      some: "key",
+      properties: { hello: { type: "string" } },
+    });
+    expect(res.success).toBe(false);
+    expect(res.message).toBe(BadConfigMsg);
+  });
+
+  test("valid json", async () => {
+    const res = validateConfigJson({
+      hello: { type: "string" },
+      helloInt: { type: "int" },
+      helloFloat: { type: "float" },
+      helloBool: { type: "bool" },
+      helloPassword: { type: "password" },
+      helloEnum: { type: ["a", "b", "c"] },
+    });
+    expect(res.success).toBe(true);
+  });
+});
 
 describe("readPositionalFile", () => {
   test("no positional arg provided", async () => {
     const res = readPositionalFile(["bun", "index.ts"]);
-    expect(res.success).toBe(false);
-    expect(res.message).toBe(NoConfigFileProvidedMsg);
+    expect(res.success).toBe(true);
+    expect(res.help).toBe(HelpMsg);
   });
 
   test("too many positional arg provided", async () => {
