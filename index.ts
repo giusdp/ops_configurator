@@ -38,6 +38,7 @@ The configuration file must be an non-empty JSON with the following structure:
   ...
 } 
 
+The keys must be uppercase words (separated by underscores).
 The value for the "type" key must be either string with the following values:
 - string
 - int
@@ -93,6 +94,7 @@ async function main() {
   }
 
   // 4. Run OPS_CMD to get the available config data
+  // TODO if I add .quiet() to avoid printing stdout, the script crashes. Bun bug?
   const { exitCode, stderr, stdout } = await $`${OPS_CMD} -config -d`.nothrow();
   if (exitCode !== 0) {
     cancel(stderr.toString());
@@ -112,7 +114,13 @@ async function main() {
 
   // 7. Save the data to the config?
   console.log();
-  console.log("Saving the following configuration:", inputConfigs);
+
+  // Build the string "KEY=VALUE KEY=VALUE ..." from the inputConfigs
+  const configStr = Object.entries(inputConfigs)
+    .map(([key, value]) => `${key}="${value.value}"`)
+    .join(" ");
+
+  await $`${OPS_CMD} -config ${configStr}`;
 
   outro("You're all set!");
 }
@@ -281,6 +289,13 @@ export function validateConfigJson(body: Record<string, any>): {
       !["string", "int", "float", "bool", "password"].includes(value.type) &&
       !Array.isArray(value.type)
     ) {
+      return { success: false, message: BadConfigMsg };
+    }
+  }
+
+  // 3. Check that all the keys are uppercase and can only have underscores not at the beginning or end
+  for (const key in body) {
+    if (!/^[A-Z][A-Z_]*[A-Z]$/.test(key)) {
       return { success: false, message: BadConfigMsg };
     }
   }

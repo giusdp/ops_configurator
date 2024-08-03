@@ -58,12 +58,12 @@ describe("validateConfigJson", () => {
 
   test("valid json", async () => {
     const res = validateConfigJson({
-      hello: { type: "string" },
-      helloInt: { type: "int" },
-      helloFloat: { type: "float" },
-      helloBool: { type: "bool" },
-      helloPassword: { type: "password" },
-      helloEnum: { type: ["a", "b", "c"] },
+      HELLO: { type: "string" },
+      HELLO_INT: { type: "int" },
+      HELLO_FLOAT: { type: "float" },
+      HELLO_BOOL: { type: "bool" },
+      HELLOPASS: { type: "password" },
+      HELLOENUM: { type: ["a", "b", "c"] },
     });
     expect(res.success).toBe(true);
   });
@@ -112,6 +112,6 @@ describe("parsePositionalFile", () => {
   test("valid json", async () => {
     const jsonRes = await parsePositionalFile("tests//fixtures/valid.json");
     expect(jsonRes.success).toBe(true);
-    expect(jsonRes.body).toEqual({ hello: { type: "string" } });
+    expect(jsonRes.body).toEqual({ HELLO: { type: "string" } });
   });
 });
