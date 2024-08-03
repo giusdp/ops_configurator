@@ -3,20 +3,19 @@ import { $ } from "bun";
 import {
   intro,
   outro,
-  confirm,
   select,
-  spinner,
   isCancel,
   cancel,
   text,
+  password,
 } from "@clack/prompts";
-import { setTimeout as sleep } from "timers/promises";
 import color from "picocolors";
 
 import { parseArgs } from "util";
 
-type Prompt = {
-  name: string;
+type Prompts = Record<string, PromptData>;
+
+type PromptData = {
   type: string | string[];
   value?: string;
 };
@@ -63,7 +62,7 @@ async function main() {
   // 1. Read input config json
   const readPosRes = readPositionalFile(positionals);
   if (!readPosRes.success) {
-    console.error(readPosRes.message);
+    cancel(readPosRes.message);
     return process.exit(1);
   }
 
@@ -80,88 +79,137 @@ async function main() {
   const jsonRes = await parsePositionalFile(readPosRes.positional!);
 
   if (!jsonRes.success) {
-    console.error(jsonRes.message);
+    cancel(jsonRes.message);
     return process.exit(1);
   }
 
   const config = jsonRes.body;
 
   // 3. Validate the given config json
-  validateConfigJson(config);
-
-  // 4. Run OPS_CMD to get the available config data
-  const { exitCode, stderr, stdout } = await $`${OPS_CMD} -config -d`.nothrow();
-
-  if (exitCode !== 0) {
-    console.error(stderr.toString());
+  const validationRes = validateConfigJson(config);
+  if (!validationRes.success) {
+    cancel(validationRes.message);
     return process.exit(1);
   }
 
-  const opsConfig = stdout.toJSON();
+  // 4. Run OPS_CMD to get the available config data
+  const { exitCode, stderr, stdout } = await $`${OPS_CMD} -config -d`.nothrow();
+  if (exitCode !== 0) {
+    cancel(stderr.toString());
+    return process.exit(1);
+  }
+
+  const opsConfig = stdout.toString();
 
   // 5. Remove the keys from config that are already in the opsConfig
   const missingData = findMissingConfig(config, opsConfig);
 
   // 6. Ask the user for the missing data
+  console.log();
+  intro(color.inverse(" ops configurator "));
+
+  const inputConfigs = await askMissingData(missingData);
 
   // 7. Save the data to the config?
-
   console.log();
-  intro(color.inverse(" create-my-app "));
-
-  const name = await text({
-    message: "What is your name?",
-    placeholder: "Anonymous",
-  });
-
-  if (isCancel(name)) {
-    cancel("Operation cancelled");
-    return process.exit(0);
-  }
-
-  const shouldContinue = await confirm({
-    message: "Do you want to continue?",
-  });
-
-  if (!shouldContinue) {
-    cancel("Operation cancelled");
-    return process.exit(0);
-  }
-
-  const projectType = await select({
-    message: "Pick a project type.",
-    options: [
-      { value: "ts", label: "TypeScript" },
-      { value: "js", label: "JavaScript" },
-      { value: "coffee", label: "CoffeeScript", hint: "oh no" },
-    ],
-  });
-
-  if (isCancel(projectType)) {
-    cancel("Operation cancelled");
-    return process.exit(0);
-  }
-
-  const s = spinner();
-  s.start("Installing via npm");
-
-  await sleep(3000);
-
-  s.stop("Installed via npm");
+  console.log("Saving the following configuration:", inputConfigs);
 
   outro("You're all set!");
+}
 
-  await sleep(1000);
+async function askMissingData(missingData: Prompts): Promise<Prompts> {
+  if (Object.keys(missingData).length === 0) {
+    outro("Configuration set from ops");
+    process.exit(0);
+  }
+  console.log();
+  console.log("Configuration partially set from ops. Need a few more:");
+
+  const inputConfigs: Prompts = {};
+
+  for (const key in missingData) {
+    const prompt: PromptData = missingData[key];
+
+    if (Array.isArray(prompt.type)) {
+      const selected = await select({
+        message: `Pick a value for '${key}'`,
+        options: prompt.type.map((v) => ({ label: v, value: v })),
+      });
+
+      if (!selected) {
+        cancel("Operation cancelled");
+        process.exit(0);
+      }
+
+      inputConfigs[key] = { ...prompt, value: selected.toString() };
+    } else if (prompt.type === "bool") {
+      const selected = await select({
+        message: `Pick a true/false for '${key}'`,
+        options: [
+          { label: "true", value: "true" },
+          { label: "false", value: "false" },
+        ],
+      });
+
+      if (!selected) {
+        cancel("Operation cancelled");
+        process.exit(0);
+      }
+
+      inputConfigs[key] = { ...prompt, value: selected.toString() };
+    } else if (prompt.type === "password") {
+      const input = await password({
+        message: `Enter password value for ${key}`,
+      });
+
+      if (isCancel(input)) {
+        cancel("Operation cancelled");
+        process.exit(0);
+      }
+
+      inputConfigs[key] = { ...prompt, value: input };
+    } else {
+      const input = await text({
+        message: `Enter value for ${key} (${prompt.type})`,
+      });
+
+      if (isCancel(input)) {
+        cancel("Operation cancelled");
+        process.exit(0);
+      }
+
+      switch (prompt.type) {
+        case "int":
+          if (!Number.isInteger(Number(input))) {
+            cancel(`Value for ${key} must be an integer`);
+            process.exit(1);
+          }
+          break;
+        case "float":
+          if (!Number(input)) {
+            cancel(`Value for ${key} must be a float`);
+            process.exit(1);
+          }
+          break;
+      }
+
+      inputConfigs[key] = { ...prompt, value: input };
+    }
+  }
+
+  return inputConfigs;
 }
 
 export function findMissingConfig(
   config: Record<string, any>,
-  opsConfig: Record<string, any>
-): Record<string, any> {
+  opsConfig: string
+): Prompts {
   let newConfig: Record<string, any> = {};
 
+  let opsConfigKeys = opsConfig.split("\n").map((line) => line.split("=")[0]);
+
   for (const key in config) {
-    if (key in opsConfig) {
+    if (opsConfigKeys.includes(key)) {
       continue;
     }
     newConfig[key] = config[key];

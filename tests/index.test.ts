@@ -10,31 +10,31 @@ import {
   findMissingConfig,
 } from "../index.ts";
 
-describe("cleanUpConfig", () => {
+describe("findMissingConfig", () => {
   test("config has some opsConfig key", async () => {
     const config: any = { hello: "world", world: "hello" };
-    const opsConfig = { hello: "world" };
-    const newC = findMissingConfig(config, opsConfig);
+    const opsConfig = "hello=world";
+    const newC: any = findMissingConfig(config, opsConfig);
     expect(newC).toEqual({ world: "hello" });
   });
 
   test("config has no opsConfig key", async () => {
     const config: any = { hello: "world", world: "hello" };
-    const opsConfig = { not: "existing" };
-    const newC = findMissingConfig(config, opsConfig);
+    const opsConfig = "not=existing";
+    const newC: any = findMissingConfig(config, opsConfig);
     expect(newC).toEqual({ hello: "world", world: "hello" });
   });
 
   test("opsConfig has no key", async () => {
     const config: any = { hello: "world", world: "hello" };
-    const opsConfig = {};
-    const newC = findMissingConfig(config, opsConfig);
+    const opsConfig = "";
+    const newC: any = findMissingConfig(config, opsConfig);
     expect(newC).toEqual({ hello: "world", world: "hello" });
   });
 
   test("config and opsConfig are the same", async () => {
     const config: any = { hello: "world", world: "hello" };
-    const opsConfig = { hello: "world", world: "hello" };
+    const opsConfig = "hello=world\nworld=hello";
     const newC = findMissingConfig(config, opsConfig);
     expect(newC).toEqual({});
   });
@@ -112,6 +112,6 @@ describe("parsePositionalFile", () => {
   test("valid json", async () => {
     const jsonRes = await parsePositionalFile("tests//fixtures/valid.json");
     expect(jsonRes.success).toBe(true);
-    expect(jsonRes.body).toEqual({ hello: "world" });
+    expect(jsonRes.body).toEqual({ hello: { type: "string" } });
   });
 });
